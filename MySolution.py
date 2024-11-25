@@ -1,32 +1,72 @@
+import cvxpy as cp
 import numpy as np
 from sklearn.metrics import normalized_mutual_info_score, accuracy_score
+
+
 ### TODO: import any other packages you need for your solution
+
 
 #--- Task 1 ---#
 class MyClassifier:  
-    def __init__(self, K):
-        self.K = K  # number of classes
+    def __init__(self, num_class: int, num_feature: int):
+        self.num_class = num_class  # number of classes
 
         ### TODO: Initialize other parameters needed in your algorithm
-        # examples:
-        # self.w = None
-        # self.b = None
+        self.w = np.ndarray(shape=(num_class, num_feature), dtype=np.float32)
+        self.b = np.ndarray(shape=(num_class, 1), dtype=np.float32)
 
     
-    def train(self, trainX, trainY):
+    def train(self, trainX, trainY, C=1.0):
         ''' Task 1-2 
             TODO: train classifier using LP(s) and updated parameters needed in your algorithm 
         '''
+        batch_size, feature_dim = trainX.shape
+        num_classes = len(np.unique(trainY))
         
+        # Variables for each class
+        slack = []
+        problems = []
+        
+        for i_class in range(num_classes):
+            y_k = np.where(trainY == i_class, 1, -1)
+            
+            # Variables
+            w_k = cp.Variable(feature_dim)
+            b_k = cp.Variable()
+            eps_k = cp.Variable(batch_size)
+            
+            # Constraints
+            constraints = [y_k[i] * (trainX[i] @ w_k + b_k) >= 1 - eps_k[i] for i in range(batch_size)]
+            constraints += [eps_k >= 0]
+            
+            # Objective
+            objective = cp.Minimize(cp.norm(w_k, 1) + C * cp.sum(eps_k))
+            
+            # Problem
+            problem = cp.Problem(objective, constraints)
+            problems.append(problem)
+            
+            # Solve problem
+            problem.solve()
+            
+            # Record weights and biases
+            self.w[i_class] = w_k.value
+            self.b[i_class] = b_k.value
+            slack.append(eps_k)
+            
+            print(f"Class {i_class}:")
+            print("Optimal weights (w):", self.w[i_class])
+            print("Optimal bias (b):", self.b[i_class])
+
     
     def predict(self, testX):
         ''' Task 1-2 
             TODO: predict the class labels of input data (testX) using the trained classifier
         '''
-
-
-        # Return the predicted class labels of the input data (testX)
-        return predY
+        logits = self.w @ np.transpose(testX) + self.b
+        pred_Y = np.argmax(logits, axis=0)
+        
+        return pred_Y
     
 
     def evaluate(self, testX, testY):
@@ -39,8 +79,8 @@ class MyClassifier:
 ##########################################################################
 #--- Task 2 ---#
 class MyClustering:
-    def __init__(self, K):
-        self.K = K  # number of classes
+    def __init__(self, num_classes: int):
+        self.num_classes = num_classes  # number of classes
         self.labels = None
 
         ### TODO: Initialize other parameters needed in your algorithm
@@ -52,6 +92,7 @@ class MyClustering:
         ''' Task 2-2 
             TODO: cluster trainX using LP(s) and store the parameters that discribe the identified clusters
         '''
+        
 
 
         # Update and teturn the cluster labels of the training data (trainX)
