@@ -82,6 +82,7 @@ class MyClustering:
     def __init__(self, num_classes: int):
         self.num_classes = num_classes  # number of classes
         self.labels = None
+        self.cluster_centers_ = None  # To store the cluster centroids
 
         ### TODO: Initialize other parameters needed in your algorithm
         # examples: 
@@ -92,10 +93,36 @@ class MyClustering:
         ''' Task 2-2 
             TODO: cluster trainX using LP(s) and store the parameters that discribe the identified clusters
         '''
-        
+        batch_size, feature_dim = trainX.shape  # Number of data points and feature dimensions
+        num_clusters = self.num_classes  # Number of clusters
 
+        # Variables for LP
+        C = cp.Variable((num_clusters, feature_dim))  # Cluster centroids (num_clusters x feature_dim)
+        Z = cp.Variable((batch_size, num_clusters), boolean=True)  # Assignment matrix (batch_size x num_clusters)
+        U = cp.Variable((batch_size, num_clusters, feature_dim))  # Auxiliary variables for |x_i - c_k|
 
-        # Update and teturn the cluster labels of the training data (trainX)
+        # Constraints
+        constraints = []
+
+        constraints += [cp.sum(Z, axis=1) == 1]
+
+        for i in range(batch_size):
+            for k in range(num_clusters):
+                for j in range(feature_dim):
+                    constraints += [U[i, k, j] >= trainX[i, j] - C[k, j]]
+                    constraints += [U[i, k, j] >= C[k, j] - trainX[i, j]]
+
+        # Objective
+        objective = cp.Minimize(cp.sum(cp.multiply(Z, cp.sum(U, axis=2))))
+
+        # Solve problem
+        problem = cp.Problem(objective, constraints)
+        problem.solve()
+
+        # Record optimal centroid of each cluster
+        self.cluster_centers_ = C.value 
+        self.labels = np.argmax(Z.value, axis=1)  # Assign cluster labels
+
         return self.labels
     
     
@@ -103,6 +130,12 @@ class MyClustering:
         ''' Task 2-2 
             TODO: assign new data points to the existing clusters
         '''
+
+        # Compute distances between each test point and all cluster centers
+        distances = np.abs(testX[:, np.newaxis, :] - self.cluster_centers_).sum(axis=2)  # Shape: (num_test_points, num_clusters)
+
+        # Assign each test point to the nearest cluster (smallest distance)
+        pred_labels = np.argmin(distances, axis=1)
 
         # Return the cluster labels of the input data (testX)
         return pred_labels
