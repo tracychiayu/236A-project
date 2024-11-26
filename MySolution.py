@@ -2,6 +2,7 @@ import cvxpy as cp
 import numpy as np
 from collections import Counter
 from sklearn.svm import SVC 
+from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score, accuracy_score
 
 
@@ -194,6 +195,58 @@ class MyClassification_SVMLinear:
 
 ##########################################################################
 #--- Task 2 ---#
+
+class ExternalClustering:
+    def __init__(self, num_clusters: int):
+        self.num_clusters = num_clusters
+        self.kmeans = None
+        self.labels = None
+        
+    def train(self, trainX, trainY):
+        kmeans = KMeans(n_clusters=self.num_clusters, random_state=0, n_init="auto").fit(trainX)
+        self.kmeans = kmeans
+        self.labels = kmeans.labels_
+        
+        
+    def predict(self, testX):
+        return self.kmeans.predict(testX)
+    
+    
+    def evaluate_clustering(self, trainY):
+        label_reference = self.get_class_cluster_reference(self.labels, trainY)
+        aligned_labels = self.align_cluster_labels(self.labels, label_reference)
+        nmi = normalized_mutual_info_score(trainY, aligned_labels)
+
+        return nmi
+    
+
+    def evaluate_classification(self, trainY, testX, testY):
+        pred_labels = self.predict(testX)
+        label_reference = self.get_class_cluster_reference(self.labels, trainY)
+        aligned_labels = self.align_cluster_labels(pred_labels, label_reference)
+        accuracy = accuracy_score(testY, aligned_labels)
+
+        return accuracy
+
+
+    def get_class_cluster_reference(self, cluster_labels, true_labels):
+        ''' assign a class label to each cluster using majority vote '''
+        label_reference = {}
+        for i in range(len(np.unique(cluster_labels))):
+            index = np.where(cluster_labels == i,1,0)
+            num = np.bincount(true_labels[index==1]).argmax()
+            label_reference[i] = num
+
+        return label_reference
+    
+    def align_cluster_labels(self, cluster_labels, reference):
+        ''' update the cluster labels to match the class labels'''
+        aligned_lables = np.zeros_like(cluster_labels)
+        for i in range(len(cluster_labels)):
+            aligned_lables[i] = reference[cluster_labels[i]]
+
+        return aligned_lables
+        
 class MyClustering:
     def __init__(self, num_classes: int, max_iter=100, tol=1e-4, random_seed=None):
         self.num_classes = num_classes  # Number of clusters
