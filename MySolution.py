@@ -125,9 +125,9 @@ class MyClassifier_OvO:
                 # Store the trained classifier
                 classifiers[(class_i, class_j)] = (w.value, b.value)
                 
-                print(f"Class {i} and {j}:")
-                print("Optimal weights (w):", w.value)
-                print("Optimal bias (b):", b.value)
+                # print(f"Class {i} and {j}:")
+                # print("Optimal weights (w):", w.value)
+                # print("Optimal bias (b):", b.value)
                 
         self.my_classifiers = classifiers
         
