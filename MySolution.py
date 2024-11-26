@@ -195,51 +195,76 @@ class MyClassification_SVMLinear:
 ##########################################################################
 #--- Task 2 ---#
 class MyClustering:
-    def __init__(self, num_classes: int):
-        self.num_classes = num_classes  # number of classes
-        self.labels = None
-        self.cluster_centers_ = None  # To store the cluster centroids
+    def __init__(self, num_classes: int, max_iter=100, tol=1e-4, random_seed=None):
+        self.num_classes = num_classes  # Number of clusters
+        self.max_iter = max_iter        # Maximum number of iterations
+        self.tol = tol                  # Tolerance for convergence
+        self.labels = None              # Cluster assignments
+        self.cluster_centers_ = None    # Cluster centroids
+        self.random_seed = random_seed # Random seed for reproducibility
 
-        ### TODO: Initialize other parameters needed in your algorithm
-        # examples: 
-        # self.cluster_centers_ = None
-        
-    
     def train(self, trainX):
-        ''' Task 2-2 
-            TODO: cluster trainX using LP(s) and store the parameters that discribe the identified clusters
         '''
-        batch_size, feature_dim = trainX.shape  # Number of data points and feature dimensions
-        num_clusters = self.num_classes  # Number of clusters
+        Train method to perform clustering iteratively using linear programming.
+        trainX: Input data matrix of shape (N, feature_dim).
+        '''
+        n_points, feature_dim = trainX.shape
 
-        # Variables for LP
-        C = cp.Variable((num_clusters, feature_dim))  # Cluster centroids (num_clusters x feature_dim)
-        Z = cp.Variable((batch_size, num_clusters), boolean=True)  # Assignment matrix (batch_size x num_clusters)
-        U = cp.Variable((batch_size, num_clusters, feature_dim))  # Auxiliary variables for |x_i - c_k|
+        # Step 1: Randomly initialize centroids with a fixed seed
+        if self.random_seed is not None:
+            np.random.seed(self.random_seed)  # Fix random seed for reproducibility
+        centroids = trainX[np.random.choice(n_points, self.num_classes, replace=False), :]
+        
+        for iteration in range(self.max_iter):
+            # Step 2: Assign points to the nearest centroid
+            distances = np.linalg.norm(trainX[:, None] - centroids, axis=2)  # Compute distances
+            labels = np.argmin(distances, axis=1)  # Assign points to the nearest centroid
 
-        # Constraints
-        constraints = []
+            # Step 3: Update centroids using LP
+            new_centroids = []
+            for k in range(self.num_classes):
+                # Points assigned to cluster k
+                cluster_points = trainX[labels == k]
+                
+                if len(cluster_points) == 0:
+                    # If no points are assigned to this cluster, skip
+                    new_centroids.append(centroids[k])
+                    continue
+                
+                # Define LP to minimize the sum of distances to the points in this cluster
+                Ck = cp.Variable((1, feature_dim))
+                objective = cp.sum(cp.norm(cluster_points - Ck, axis=1))
+                problem = cp.Problem(cp.Minimize(objective))
+                problem.solve()
+                
+                # Store the optimized centroid
+                new_centroids.append(Ck.value.flatten())
 
-        constraints += [cp.sum(Z, axis=1) == 1]
+            # Step 4: Update centroids to the point closest to the mean
+            updated_centroids = []
+            for k in range(self.num_classes):
+                cluster_points = trainX[labels == k]
+                if len(cluster_points) == 0:
+                    updated_centroids.append(centroids[k])
+                else:
+                    mean_point = np.mean(cluster_points, axis=0)
+                    # Find the point closest to the mean
+                    closest_point = cluster_points[np.argmin(np.linalg.norm(cluster_points - mean_point, axis=1))]
+                    updated_centroids.append(closest_point)
+            
+            updated_centroids = np.array(updated_centroids)
+            
+            # Check for convergence (change in centroids is smaller than tolerance)
+            if np.linalg.norm(updated_centroids - centroids) < self.tol:
+                print(f"Converged after {iteration + 1} iterations.")
+                break
+            
+            centroids = updated_centroids
 
-        for i in range(batch_size):
-            for k in range(num_clusters):
-                for j in range(feature_dim):
-                    constraints += [U[i, k, j] >= trainX[i, j] - C[k, j]]
-                    constraints += [U[i, k, j] >= C[k, j] - trainX[i, j]]
-
-        # Objective
-        objective = cp.Minimize(cp.sum(cp.multiply(Z, cp.sum(U, axis=2))))
-
-        # Solve problem
-        problem = cp.Problem(objective, constraints)
-        problem.solve()
-
-        # Record optimal centroid of each cluster
-        self.cluster_centers_ = C.value 
-        self.labels = np.argmax(Z.value, axis=1)  # Assign cluster labels
-
-        return self.labels
+        # Store results
+        self.cluster_centers_ = centroids
+        self.labels = labels
+        return labels
     
     
     def infer_cluster(self, testX):
@@ -247,10 +272,10 @@ class MyClustering:
             TODO: assign new data points to the existing clusters
         '''
 
-        # Compute distances between each test point and all cluster centers
-        distances = np.abs(testX[:, np.newaxis, :] - self.cluster_centers_).sum(axis=2)  # Shape: (num_test_points, num_clusters)
+        # Compute the distances between each point in testX and the centroids
+        distances = np.linalg.norm(testX[:, None] - self.cluster_centers_, axis=2)  # (M, 3) distances to centroids
 
-        # Assign each test point to the nearest cluster (smallest distance)
+        # Assign each point to the closest centroid (class)
         pred_labels = np.argmin(distances, axis=1)
 
         # Return the cluster labels of the input data (testX)
