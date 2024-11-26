@@ -35,12 +35,12 @@ def prepare_mnist_data():
 
 
 
-def visualize_features(feat_to_keep):
+def visualize_features(feat_to_keep, method):
         feat_len = len(feat_to_keep)
         feat_mask = np.zeros(784)
         feat_mask[feat_to_keep] = 1
         plt.imshow(feat_mask.reshape(28,28), cmap='gray')
-        plt.title(f'Selected {feat_len} Features')
+        plt.title(f'Selected {feat_len} Features using {method}')
         plt.show()
 
 
@@ -114,10 +114,12 @@ def plot_result(result1 = None, result2 = None, result3_1 = None, result3_2 = No
 
 
     if result3_2 != None: 
-        plt.plot(result3_2['feature_number'], result3_2['classifier_accuracy(our algo)'], label='Classification - our algo', marker='x', markersize=8)
-        plt.plot(result3_2['feature_number'], result3_2['classifier_accuracy(random)'], label='Classification - random selection', marker='o', markersize=8)
-        plt.plot(result3_2['feature_number'], result3_2['clustering_accuracy(our algo)'], label='Clustering - our algo', marker='x', linestyle='--', markersize=8)
-        plt.plot(result3_2['feature_number'], result3_2['clustering_accuracy(random)'], label='Clustering - random selection', marker='o', linestyle='--', markersize=8)
+        plt.plot(result3_2['feature_number'], result3_2['classifier_accuracy(our algo)'], label='Classification - our algo', marker='x', color="green", markersize=8)
+        plt.plot(result3_2['feature_number'], result3_2['classifier_accuracy(random)'], label='Classification - random selection', marker='x', color="grey" ,markersize=8)
+        plt.plot(result3_2['feature_number'], result3_2['classifier_accuracy(Max MI)'], label='Classification - max mutual information', marker='x', color="magenta" ,markersize=8)
+        plt.plot(result3_2['feature_number'], result3_2['clustering_accuracy(our algo)'], label='Clustering - our algo', marker='o', color="green", linestyle='--', markersize=8)
+        plt.plot(result3_2['feature_number'], result3_2['clustering_accuracy(random)'], label='Clustering - random selection', marker='o', color="grey", linestyle='--', markersize=8)
+        plt.plot(result3_2['feature_number'], result3_2['clustering_accuracy(Max MI)'], label='Clustering - max mutual information', marker='o', color="magenta", linestyle='--', markersize=8)
         plt.ylim(0,1)
         plt.legend()
         plt.xlabel("Number of Features", fontsize=12) 
@@ -127,6 +129,7 @@ def plot_result(result1 = None, result2 = None, result3_1 = None, result3_2 = No
 
         plt.plot(result3_2['feature_number'], result3_2['nmi(our algo)'], label='our algo', marker='x', linestyle='--', markersize=8,linewidth=2)
         plt.plot(result3_2['feature_number'], result3_2['nmi(random)'], label='random selection', marker='o', linestyle='--', markersize=8, linewidth=2)
+        plt.plot(result3_2['feature_number'], result3_2['nmi(Max MI)'], label='max MI', marker='^', linestyle='--', markersize=8, linewidth=2)
         plt.ylim(0,1)
         plt.legend()
         plt.xlabel("Number of Features", fontsize=12) 

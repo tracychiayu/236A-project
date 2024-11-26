@@ -4,6 +4,8 @@ from collections import Counter
 from sklearn.svm import SVC 
 from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score, accuracy_score
+from sklearn.feature_selection import mutual_info_classif
+
 
 
 ### TODO: import any other packages you need for your solution
@@ -286,7 +288,7 @@ class MyClustering:
                 
                 # Define LP to minimize the sum of distances to the points in this cluster
                 Ck = cp.Variable((1, feature_dim))
-                objective = cp.sum(cp.norm(cluster_points - Ck, axis=1))
+                objective = cp.sum(cp.norm(cluster_points - Ck, 1, axis=1))
                 problem = cp.Problem(cp.Minimize(objective))
                 problem.solve()
                 
@@ -393,6 +395,20 @@ class MyLabelSelection:
 
 ##########################################################################
 #--- Task 3 (Option 2) ---#
+class MIFeatureSelection:
+    def __init__(self, num_features):
+        self.num_features = num_features  # target number of features
+        self.mi_scores = None
+    
+    def computeMI(self, trainX, trainY):
+        mi_scores = mutual_info_classif(trainX, trainY)
+        self.mi_scores = mi_scores
+        
+    def select(self):
+        feat_to_keep = np.argsort(self.mi_scores)[::-1][:self.num_features]
+        return feat_to_keep
+    
+
 class MyFeatureSelection:
     def __init__(self, num_features):
         self.num_features = num_features  # target number of features
