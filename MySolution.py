@@ -1,5 +1,7 @@
 import cvxpy as cp
 import numpy as np
+from collections import Counter
+from sklearn.svm import SVC 
 from sklearn.metrics import normalized_mutual_info_score, accuracy_score
 
 
@@ -7,7 +9,9 @@ from sklearn.metrics import normalized_mutual_info_score, accuracy_score
 
 
 #--- Task 1 ---#
-class MyClassifier:  
+
+class MyClassifier_OvA:  
+    ''' !!! DEPRECATED: This class is not used in the final solution !!! '''
     def __init__(self, num_class: int, num_feature: int):
         self.num_class = num_class  # number of classes
 
@@ -57,15 +61,17 @@ class MyClassifier:
             print(f"Class {i_class}:")
             print("Optimal weights (w):", self.w[i_class])
             print("Optimal bias (b):", self.b[i_class])
+            
+        return self.w, self.b
 
     
-    def predict(self, testX):
+    def predict(self, testX, testY_range=[0, 1, 2]):
         ''' Task 1-2 
             TODO: predict the class labels of input data (testX) using the trained classifier
         '''
         logits = self.w @ np.transpose(testX) + self.b
         pred_Y = np.argmax(logits, axis=0)
-        
+        print(logits)
         return pred_Y
     
 
@@ -75,6 +81,116 @@ class MyClassifier:
 
         return accuracy
     
+    
+class MyClassifier_OvO:
+    def __init__(self, num_class: int):
+        self.num_class = num_class  # number of classes
+        self.my_classifiers = None
+    
+    def train(self, trainX, trainY):
+        ''' Task 1-2 '''
+        
+        classes = np.unique(trainY)
+        classifiers = {}
+        
+        for i in range(len(classes)):
+            for j in range(i + 1, len(classes)):
+                class_i, class_j = classes[i], classes[j]
+                
+                # Filter data for the two classes
+                mask = (trainY == class_i) | (trainY == class_j)
+                X_pair = trainX[mask]
+                y_pair = trainY[mask]
+                y_binary = np.where(y_pair == class_i, 1, -1)  # Map to {1, -1}
+                
+                # Define CVXPY variables
+                batch_size, n_features = X_pair.shape
+                w = cp.Variable(n_features)
+                b = cp.Variable()
+                xi = cp.Variable(len(y_binary))  # Slack variables
+                C = 1.0  # Regularization strength
+                
+                # Define the objective function with L1 norm on w
+                objective = cp.Minimize(cp.norm(w, 1) + C * cp.sum(xi))
+                
+                # Define constraints
+                constraints = [y_binary[i] * (X_pair[i] @ w + b) >= 1 - xi[i] for i in range(batch_size)]
+                constraints += [xi >= 0]
+                
+                # Solve the problem
+                problem = cp.Problem(objective, constraints)
+                problem.solve()
+                
+                # Store the trained classifier
+                classifiers[(class_i, class_j)] = (w.value, b.value)
+                
+                print(f"Class {i} and {j}:")
+                print("Optimal weights (w):", w.value)
+                print("Optimal bias (b):", b.value)
+                
+        self.my_classifiers = classifiers
+        
+        return classifiers
+    
+    def predict(self, testX):
+        votes = []
+        for (class_i, class_j), (w, b) in self.my_classifiers.items():
+            predictions = np.sign(testX @ w + b)  # Predict binary labels
+            class_preds = np.where(predictions == 1, class_i, class_j)
+            votes.append(class_preds)
+        
+        # Combine votes
+        votes = np.array(votes).T
+        final_preds = [Counter(v).most_common(1)[0][0] for v in votes]
+        return np.array(final_preds)
+            
+    
+class MyClassification_SVMLinear:
+    ''' SKlearn package used as external reference '''
+    def __init__(self, num_classes: int):
+        self.num_classes = num_classes
+        self.my_classifiers = None
+        
+    def train(self, trainX, trainY):
+        classes = np.unique(trainY)
+        classifiers = {}
+        for i in range(len(classes)):
+            for j in range(i + 1, len(classes)):
+                class_i = classes[i]
+                class_j = classes[j]
+                
+                # Extract samples belonging to the current pair of classes
+                indices = np.where((trainY == class_i) | (trainY == class_j))[0]
+                X_pair = trainX[indices]
+                y_pair = trainY[indices]
+                
+                # Convert labels to binary: class_i -> 0, class_j -> 1
+                y_binary = (y_pair == class_j).astype(int)
+                
+                # Train a linear SVM
+                clf = SVC(kernel='linear', probability=False)  # Use linear kernel
+                clf.fit(X_pair, y_binary)
+                
+                # Store the classifier for this pair
+                classifiers[(class_i, class_j)] = clf
+                
+        self.my_classifiers = classifiers
+        return classifiers
+    
+    def predict(self, testX):
+        votes = []
+        for (class_i, class_j), clf in self.my_classifiers.items():
+            # Get binary predictions
+            binary_preds = clf.predict(testX)
+            
+            # Convert binary predictions back to original class labels
+            class_preds = np.where(binary_preds == 0, class_i, class_j)
+            votes.append(class_preds)
+        
+        # Combine votes
+        votes = np.array(votes).T
+        final_preds = [Counter(v).most_common(1)[0][0] for v in votes]
+        return np.array(final_preds)
 
 ##########################################################################
 #--- Task 2 ---#
