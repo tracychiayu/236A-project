@@ -415,12 +415,117 @@ class MyFeatureSelection:
         ### TODO: Initialize other parameters needed in your algorithm
 
 
-    def construct_new_features(self, trainX, trainY=None):  # NOTE: trainY can only be used for construting features for classification task
+    def construct_new_features(self, weight, c):  # NOTE: trainY can only be used for construting features for classification task
         ''' Task 3-2'''
-        
+        z = cp.Variable(784, boolean=True)  # Binary indicator vector
+
+        # Define the objective function
+        objective = cp.Maximize(cp.sum(np.transpose(c) @ weight @ z))
+
+        # Define the constraints
+        constraints = [
+            cp.sum(z) == self.num_features,  # Sum of selected columns must equal n
+        ]
+
+        # Define and solve the problem
+        problem = cp.Problem(objective, constraints)
+        problem.solve()
 
 
         # Return an index list that specifies which features to keep
-        return feat_to_keep
+        indices = np.where(z.value == 1.)[0]
+        return indices
     
     
+class MyClusteringFeatureSelection:
+    def __init__(self, num_samples, num_features, num_selected_features):
+        self.num_samples = num_samples  # number of samples
+        self.num_features = num_features  # target number of features
+        self.num_selected_features = num_selected_features  # number of selected features
+        
+    def select(self, trainX):
+        
+        # Compute column-wise mean
+        mean = np.mean(trainX, axis=0, keepdims=True)
+        T = cp.abs(trainX - mean)  # Center the data
+        
+        # Variables
+        z = cp.Variable(self.num_features, boolean=True)  # Binary indicator vector
+        
+        # Objective function
+        objective = cp.Maximize(np.ones(shape=(1, self.num_samples)) @ T @ z)
+        
+        # Constraints
+        constraints = [
+            cp.sum(z) == self.num_selected_features  # Select n features
+        ]
+        
+        problem = cp.Problem(objective, constraints)
+        problem.solve()
+        
+        indices = np.where(z.value == 1.)[0]
+        return indices
+    
+class MyClassifier_OvO_ILP:
+    def __init__(self, num_class: int, original_feature_dim=784):
+        self.num_class = num_class  # number of classes
+        self.my_classifiers = None
+        self.weights =  np.ndarray(shape=(num_class, original_feature_dim), dtype=np.float32)
+    
+    def train(self, trainX, trainY):
+        ''' Task 1-2 '''
+        
+        classes = np.unique(trainY)
+        classifiers = {}
+        
+        for i_first in range(len(classes)):
+            for j_second in range(i_first + 1, len(classes)):
+                class_i, class_j = classes[i_first], classes[j_second]
+                
+                # Filter data for the two classes
+                mask = (trainY == class_i) | (trainY == class_j)
+                X_pair = trainX[mask]
+                y_pair = trainY[mask]
+                y_binary = np.where(y_pair == class_i, 1, -1)  # Map to {1, -1}
+                
+                # Define CVXPY variables
+                batch_size, n_features = X_pair.shape
+                w = cp.Variable(n_features)
+                b = cp.Variable()
+                xi = cp.Variable(len(y_binary))  # Slack variables
+                C = 1.0  # Regularization strength
+                
+                # Define the objective function with L1 norm on w
+                objective = cp.Minimize(cp.norm(w, 1) + C * cp.sum(xi))
+                
+                # Define constraints
+                constraints = [y_binary[i] * (X_pair[i] @ w + b) >= 1 - xi[i] for i in range(batch_size)]
+                constraints += [xi >= 0]
+                
+                # Solve the problem
+                problem = cp.Problem(objective, constraints)
+                problem.solve()
+                
+                # Store the trained classifier
+                classifiers[(class_i, class_j)] = (w.value, b.value)
+                
+                # print(f"Class {i} and {j}:")
+                # print("Optimal weights (w):", w.value)
+                # print("Optimal bias (b):", b.value)
+                self.weights[i_first+j_second-1] = w.value
+                
+        self.my_classifiers = classifiers
+        
+        return self.weights
+    
+    def predict(self, testX):
+        votes = []
+        for (class_i, class_j), (w, b) in self.my_classifiers.items():
+            predictions = np.sign(testX @ w + b)  # Predict binary labels
+            class_preds = np.where(predictions == 1, class_i, class_j)
+            votes.append(class_preds)
+        
+        # Combine votes
+        votes = np.array(votes).T
+        final_preds = [Counter(v).most_common(1)[0][0] for v in votes]
+        return np.array(final_preds)

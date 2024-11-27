@@ -42,6 +42,18 @@ def visualize_features(feat_to_keep, method):
         plt.imshow(feat_mask.reshape(28,28), cmap='gray')
         plt.title(f'Selected {feat_len} Features using {method}')
         plt.show()
+        
+def visualize_multiple_features(feat_to_keep_list, method):
+    fig, axes = plt.subplots(1, len(feat_to_keep_list), figsize=(15, 5))
+    for i, feat_to_keep in enumerate(feat_to_keep_list):
+        feat_len = len(feat_to_keep)
+        feat_mask = np.zeros(784)
+        feat_mask[feat_to_keep] = 1
+        axes[i].imshow(feat_mask.reshape(28, 28), cmap='gray')
+        axes[i].set_title(f'Selected {feat_len} Features\nusing {method}')
+        axes[i].axis('off')
+    plt.tight_layout()
+    plt.show()
 
 
 
